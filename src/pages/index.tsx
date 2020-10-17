@@ -1,12 +1,13 @@
 import { getMakes, Make } from "../database/getMakes";
 import { GetServerSideProps } from "next";
-import { Formik, Form, Field, useField } from "formik";
-import { Paper, Grid, makeStyles } from "@material-ui/core";
+import { Formik, Form, Field, useField, useFormikContext } from "formik";
+import { Paper, Grid, makeStyles, Button } from "@material-ui/core";
 import InputLabel from "@material-ui/core/InputLabel";
 import MenuItem from "@material-ui/core/MenuItem";
 import FormControl from "@material-ui/core/FormControl";
 import Select, { SelectProps } from "@material-ui/core/Select";
-import { useRouter } from "next/router";
+import router, { useRouter } from "next/router";
+import useSWR from "swr";
 import { Model, getModels } from "../database/getModels";
 import { getAsString } from "../getAsString";
 
@@ -37,7 +38,19 @@ export default function Home({ makes, models }: HomeProps) {
   };
 
   return (
-    <Formik initialValues={initialValues} onSubmit={() => {}}>
+    <Formik
+      initialValues={initialValues}
+      onSubmit={(values) => {
+        router.push(
+          {
+            pathname: "/",
+            query: { ...values, page: 1 },
+          },
+          undefined,
+          { shallow: true }
+        );
+      }}
+    >
       {({ values }) => (
         <Form>
           <Paper elevation={5} className={classes.paper}>
@@ -63,11 +76,7 @@ export default function Home({ makes, models }: HomeProps) {
                 </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
-                <ModelSelect
-                  brand={values.brand}
-                  name="model"
-                  models={models}
-                />
+                <ModelSelect make={values.make} name="model" models={models} />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth variant="outlined">
@@ -109,6 +118,16 @@ export default function Home({ makes, models }: HomeProps) {
                   </Field>
                 </FormControl>
               </Grid>
+              <Grid item xs={12}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  fullWidth
+                >
+                  Search
+                </Button>
+              </Grid>
             </Grid>
           </Paper>
         </Form>
@@ -120,13 +139,23 @@ export default function Home({ makes, models }: HomeProps) {
 export interface ModelSelectProps extends SelectProps {
   name: string;
   models: Model[];
-  brand: string;
+  make: string;
 }
 
-export function ModelSelect({ models, brand, ...props }: ModelSelectProps) {
+export function ModelSelect({ models, make, ...props }: ModelSelectProps) {
+  const { setFieldValue } = useFormikContext();
   const [field] = useField({
     name: props.name,
   });
+
+  const { data } = useSWR<Model[]>("/api/models?make=" + make, {
+    onSuccess: (newValues) => {
+      if (!newValues.map((a) => a.model).includes(field.value)) {
+        setFieldValue("model", "all");
+      }
+    },
+  });
+  const newModels = data || models;
 
   return (
     <FormControl fullWidth variant="outlined">
@@ -141,7 +170,7 @@ export function ModelSelect({ models, brand, ...props }: ModelSelectProps) {
         <MenuItem value="all">
           <em>All Models</em>
         </MenuItem>
-        {models.map((model) => (
+        {newModels.map((model) => (
           <MenuItem
             key={model.model}
             value={model.model}
